@@ -1,13 +1,12 @@
-import traceback
-import os
 import re
 from difflib import SequenceMatcher
-import time
 import requests
 import json
 from sentence_transformers import SentenceTransformer, util
 from .SERVICE_DESCRIPTION_FINAL import description
-def google_translate(command, api_key = os.environ['GOOGLE_TRANSLATE_KEY']):
+from .mqtt import syntax_verify
+import traceback
+def google_translate(command, api_key = "AIzaSyCCOMemC2X9cCYylKStbvijOsGZwFcNb9M"):
     print("translate")
     url = "https://translation.googleapis.com/language/translate/v2"
     headers = {
@@ -40,7 +39,6 @@ def add_quote(param):
         param = param + '"'
     return param
 
-time1 = time.time()
 model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 EMAIL_ADDRESS = "test@test.com"
 MUSIC_PATH = 'music/quiet.mp3'
@@ -83,19 +81,10 @@ def fix_syntax(code):
     code = code.replace("ELSE","else")
     code = code.replace("THEN","")
     code = code.replace("then","")
-    #code = code.replace("'",'"')
     code = code.replace("hours","HOUR")
     code = code.replace("HOURS","HOUR")
     code = code.replace(" hour"," HOUR") # clock.hour이 아닌 wait until hour만 바꿔야 하므로 space가 있다
     
-    '''loop_index = code.find('loop')
-    if loop_index != -1:
-        j = loop_index
-        while j < len(code):
-            if code[j] == ')':
-                code = code[:j+1] + '{\n' + code[j+1:] + '\n}'
-                break
-            j += 1'''
 
     i = 0 
     while i < len(code): #if statement parantheses fix
@@ -125,7 +114,7 @@ def fix_syntax(code):
         i += 1
     code = code.replace("{","\n{")
     code = code.replace("}","\n}\n")
- 
+   
     i = 0
     while i < len(code) - 1: # remove comments
         if code[i] == '/' and code[i+1] == '/':
@@ -162,17 +151,6 @@ def fix_syntax(code):
                     break
             if need_add:
                 code = code[:i+1] + "(#Calculator).add(1.0,1.0)" + code[i+1:]
-        i += 1
-    i = 0
-    while i < len(code)-8:
-        if code[i] == 'w' and code[i+1] =='a' and code[i+2] == 'i' and code[i+3] == 't':
-            if code[i+4] != ' ' or code[i+5] != 'u':
-                j = i + 3
-                while j < len(code):
-                    if code[j] == '(':
-                        code = code[:i+4] + ' until' + code[j:]
-                        break
-                    j += 1
         i += 1
 
     i = 0
@@ -250,20 +228,29 @@ def find_services_in_code(code):
                 if len(parameters) == 1 and parameters[0] == '':
                     parameters = []
                 service_end = parameter_end
+            tag_name = tag_name.split(' ')
+            for j in range(len(tag_name)):
+                if tag_name[j][0] == '#':
+                    tag_name[j] = tag_name[j][1:]
             result.append({"tag":tag_name,"service":service_name,"is_function":is_function,"start_index":tag_start-2,"end_index":service_end,"parameters":parameters})
             
         i += 1
+    print(result)
     return result
 
 
 def fix_function_parameters(tag,function,parameters:list[str]):
-    service = description[tag][:description[tag].find('Values')].split('\n')
+    for tag_name in tag:
+        if tag_name in description.keys():
+            device_tag = tag_name
+    service = description[device_tag][:description[device_tag].find('Values')].split('\n')
     for line in service:
         if function in line:
             if '{' in line:
                 enum = line[line.find('{')+1:line.find('}')].split("|")
                 if function == 'setWaterPortion':return [parameters[0],get_most_similar(parameters[1],enum)]
                 if function == 'setFeedPortion':return [str(float(parameters[0])),get_most_similar(parameters[1],enum)]
+                if function == 'setColor': return parameters
                 # above: enum param + something else
                 # below: enum param only
                 return [get_most_similar(parameters[0],enum)]
@@ -277,30 +264,65 @@ def fix_function_parameters(tag,function,parameters:list[str]):
                 print("function: speak")
                 print(parameters[0])
                 print(google_translate(parameters[0]))
-                return [add_quote(google_translate(parameters[0]))] 
+                return [add_quote(google_translate(parameters[0]))]            
             else:
                 return parameters
     return parameters
 def fix_function_name(tag,function):
-    functions = get_functions_of_device(tag)
+    for tag_name in tag:
+        if tag_name in description.keys():
+            device_tag = tag_name
+
+    functions = get_functions_of_device(device_tag)
     if function in functions:
         return function
     return get_most_similar(function,functions)
+def fix_location_tag(tag:list[str]):
+    for name in tag:
+        if name in description.keys():
+            device = name
+    print(description[device])
+    a = description[device].find('Tags')
+    tags = description[device][a:].split('\n')
+    tags = tags[1:-1]
+    for i in range(len(tags)):
+        tags[i] = tags[i].strip()
+        if tags[i][-1]==',':
+            tags[i]=tags[i][:-1]
+    for i in range(len(tag)):
+        if device == tag[i]:
+            continue
+        tag[i] = get_most_similar(tag[i],tags)
+    return tag
 
 def fix_function(tag,function,parameters:list[str]):
+    tag = fix_location_tag(tag)
     function = fix_function_name(tag,function)
     parameters = fix_function_parameters(tag,function,parameters)
     print(parameters)
-    result = "(#" + tag + ")." + function + "(" + ",".join(parameters) + ")"
+    tags_string = '('
+    for tag_name in tag:
+        tags_string += '#' + tag_name 
+    tags_string += ')'
+    result = tags_string + '.' + function + "(" + ",".join(parameters) + ")"
     return result
 def fix_value_name(tag,value):
-    values = get_values_of_device(tag)
+    for tag_name in tag:
+        if tag_name in description.keys():
+            device_tag = tag_name
+    values = get_values_of_device(device_tag)
     if value in values:
         return value
     return get_most_similar(value,values)
 def fix_value(tag,value):
+    tag = fix_location_tag(tag)
     value = fix_value_name(tag,value)
-    return "(#" + tag + ")." + value
+    tags_string = '('
+    for tag_name in tag:
+        tags_string += '#' + tag_name 
+    tags_string += ')'
+
+    return tags_string + '.' + value
 def find_variables(code)->list[str]:
     variable_list = []
     for i in range(1,len(code)-1):
@@ -433,7 +455,10 @@ def fix_comparison(left,operator,right,variables)->str:
         left = temp
     # from this point, left is value service and right is a literal
     if right[0] == '"': right = right[1:len(right)-1]
-    device = left[2:left.find(')')]
+    tags = left[2:left.find(')')].split('#')
+    for tag in tags:
+        if tag in description.keys():
+            device = tag
     value_name = left[left.find('.')+1:]
     values = description[device][description[device].find('Values'):].split('\n')
 
@@ -463,19 +488,32 @@ def fix_comparisons(code):
 
 
 def fix_code2(code):
-    print("fix code")
     try:
        code = fix_syntax(code)
-       print("fix syntax")
+       print('syntax')
        code = fix_services(code)
+       print('services')
        code = fix_comparisons(code)
        return code
     except Exception as e:
         traceback.print_exc()
         return code
+if __name__ == '__main__':
+    code = """
+wait until (2 MIN)
+if(( ((#Feeder #livingroom).switch == "off") ))
+{
+(#Feeder #livingroom).on()
 
+}
 
+(#Feeder #livingroom).setFeedPortion(50, "grams")
+(#Feeder #livingroom).startFeeding()
 
+"""
 
+    code = fix_code(code)
+    print(code)
+    print(syntax_verify(code,"jh"))
 
-
+        
