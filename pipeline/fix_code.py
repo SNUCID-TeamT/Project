@@ -6,7 +6,8 @@ from sentence_transformers import SentenceTransformer, util
 from .SERVICE_DESCRIPTION_FINAL import description
 from .mqtt import syntax_verify
 import traceback
-def google_translate(command, api_key = "AIzaSyCCOMemC2X9cCYylKStbvijOsGZwFcNb9M"):
+import os
+def google_translate(command, api_key = os.environ['GOOGLE_TRANSLATE_KEY']):
     print("translate")
     url = "https://translation.googleapis.com/language/translate/v2"
     headers = {
