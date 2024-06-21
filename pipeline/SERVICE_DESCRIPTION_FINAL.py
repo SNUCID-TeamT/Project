@@ -247,12 +247,6 @@ Values : [
 ]
 Tags : []''',
 
-"TemperatureSensor":
-'''Functions : []
-Values : [
-    temperature: int [-460 ~ 10000]
-]
-Tags : []''',
 
 "WeatherProvider":
 '''Functions : [
