@@ -5,8 +5,9 @@ import json
 from sentence_transformers import SentenceTransformer, util
 from .SERVICE_DESCRIPTION_FINAL import description
 from .mqtt import syntax_verify
-import traceback
 import os
+
+import traceback
 def google_translate(command, api_key = os.environ['GOOGLE_TRANSLATE_KEY']):
     print("translate")
     url = "https://translation.googleapis.com/language/translate/v2"
@@ -41,7 +42,7 @@ def add_quote(param):
     return param
 
 model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-EMAIL_ADDRESS = "test@test.com"
+EMAIL_ADDRESS = "ethan0913@snu.ac.kr"
 MUSIC_PATH = 'music/quiet.mp3'
 def transformer_similarity(word1, word2):
     embeddings = model.encode([word1, word2])
@@ -308,6 +309,8 @@ def fix_function(tag,function,parameters:list[str]):
     result = tags_string + '.' + function + "(" + ",".join(parameters) + ")"
     return result
 def fix_value_name(tag,value):
+    if 'SoundSensor' in tag:
+        return 'sound'
     for tag_name in tag:
         if tag_name in description.keys():
             device_tag = tag_name
@@ -517,4 +520,5 @@ if(( ((#Feeder #livingroom).switch == "off") ))
     print(code)
     print(syntax_verify(code,"jh"))
 
+        
         
